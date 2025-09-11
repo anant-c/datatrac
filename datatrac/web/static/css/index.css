@@ -4,19 +4,26 @@
 
 /* Upload Section - Drag & Drop */
 #upload-section form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* two equal columns */
+  gap: 1.5rem;
+  align-items: start;
 }
 
 #upload-section input[type="file"] {
   border: 2px dashed var(--border);
-  padding: 2rem;
   border-radius: 0.75rem;
   background: var(--bg);
   text-align: center;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease;
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5em;
 }
 
 #upload-section input[type="file"]:hover {
@@ -24,13 +31,18 @@
   background: rgba(59,130,246,0.05);
 }
 
+
+/* Text inputs stack in right column */
 #upload-section input[type="text"] {
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: var(--card-bg);
   color: var(--text);
+  width: 100%;
+  grid-column: 2;
 }
+
 
 #upload-section input[type="text"]:focus {
   outline: none;
@@ -38,15 +50,20 @@
   box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
 }
 
-/* Dataset Table Actions */
-#datasets-list td form button {
-  background: var(--danger);
-  color: #fff;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.875rem;
-  border-radius: 0.5rem;
+
+/* Button also in right column */
+#upload-section button {
+  grid-column: 2;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  justify-self: start;
 }
 
-#datasets-list td a {
-  font-size: 0.875rem;
+#upload-section button:hover {
+  background: #2563eb;
 }
