@@ -9,6 +9,18 @@ from datatrac.core.manager import DataManager, get_current_user
 app = typer.Typer(help="Fetch dataset information from the registry.")
 console = Console()
 
+
+def format_size(size_bytes):
+    if size_bytes is None:
+        return "N/A"
+    if size_bytes < 1024:
+        return f"{size_bytes} Bytes"
+    if size_bytes < 1024**2:
+        return f"{size_bytes/1024:.2f} KB"
+    if size_bytes < 1024**3:
+        return f"{size_bytes/1024**2:.2f} MB"
+    return f"{size_bytes/1024**3:.2f} GB"
+
 @app.callback(invoke_without_command=True)
 def fetch(
     hash_prefix: Annotated[Optional[str], typer.Argument(help="The full hash of the dataset.")] = None,
@@ -38,17 +50,16 @@ def fetch(
             return
         
         console.print(f"Viewing as user: [bold yellow]{get_current_user()}[/bold yellow]")
-        table = Table("Name", "Hash", "Your Local Path", "Status")
+        # NEW: Added Size to the table view
+        table = Table("Name", "Size", "Hash", "Your Local Path", "Status")
         for ds in datasets:
-            # Determine the display name and status based on the is_active flag
             status = "[green]Active[/green]"
             if not ds.is_active:
                 status = "[dim red]Deregistered[/dim red] (Local-Only)"
 
             local_path = manager.find_local_path_for_user(ds.hash)
             local_path_display = str(local_path) if local_path else "N/A (Remote)"
-            
-            table.add_row(ds.name, ds.hash, local_path_display, status)
+            table.add_row(ds.name, format_size(ds.size_bytes), ds.hash, local_path_display, status)
         console.print(table)
         return
     elif hash_prefix:
@@ -57,15 +68,18 @@ def fetch(
             console.print(f"[bold red]Error:[/bold red] Dataset with hash '{hash_prefix}' not found.")
             return
 
-        # Get the local path specifically for the current user
         user_local_path = manager.find_local_path_for_user(dataset.hash)
         local_path_display = str(user_local_path) if user_local_path else "N/A (Not on this machine)"
+        last_downloaded_display = str(dataset.last_downloaded_at) if dataset.last_downloaded_at else "Never"
             
         console.print(f"[bold]Dataset Details for [cyan]{dataset.name}[/cyan][/bold]")
         console.print(f"  [cyan]Full Hash:[/cyan] {dataset.hash}")
+        console.print(f"  [cyan]Size:[/cyan] {format_size(dataset.size_bytes)}")
         console.print(f"  [cyan]Source URL:[/cyan] {dataset.source or 'N/A'}")
         console.print(f"  [cyan]Your Local Path:[/cyan] {local_path_display}")
         console.print(f"  [cyan]Registry Path:[/cyan] {dataset.registry_path}")
         console.print(f"  [cyan]Created At:[/cyan] {dataset.created_at}")
+        console.print(f"  [cyan]Download Count:[/cyan] {dataset.download_count}")
+        console.print(f"  [cyan]Last Downloaded:[/cyan] {last_downloaded_display}")
     else:
         console.print("Please specify a dataset hash or use the --all or --download flag.")
