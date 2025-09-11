@@ -137,7 +137,84 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Make all action links appear as buttons with consistent shape */
+a.button-link {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: center;
+  transition: background 0.2s ease, color 0.2s ease;
+  cursor: pointer;
+}
+
+/* Specific colors for actions */
+.view-btn {
+  background-color: var(--primary);
+  color: white;
+}
+.view-btn:hover {
+  background-color: #2563eb;
+}
+
+.lineage-btn {
+  background-color: #22c55e; /* green */
+  color: white;
+}
+.lineage-btn:hover {
+  background-color: #16a34a;
+}
+
+.download-btn {
+  background-color: var(--primary);
+  color: white;
+}
+.download-btn:hover {
+  background-color: #2563eb;
+}
+
+/* Existing danger button for delete */
+button.danger {
+  background: var(--danger);
+  color: #fff;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 0.5rem;
+}
+
+button.danger:hover {
+  background: #dc2626;
+}
+
+/* Dataset table full width and text wrap improvements */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  word-wrap: break-word;
+  word-break: break-word;
+  table-layout: fixed; /* Helps controlling wrapping */
+}
+
+th, td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: normal; /* Allow wrapping */
+}
+
+/* Responsive adjustments for long text */
+td:nth-child(2), /* Hash */ 
+td:nth-child(3) /* Source */ {
+  width: 150px; /* Fixed width with wrap */
+  overflow-wrap: break-word;
+}
+
+
 /* Transition Everywhere */
 * {
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
+
