@@ -15,8 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-datatrac = "src.cli.main:app"
-
+datatrac = "datatrac.cli.main:app"
 
 [tool.uv]
 publish-url = "https://test.pypi.org/legacy/"
