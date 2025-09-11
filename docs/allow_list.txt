@@ -13,3 +13,6 @@ datatrac/core/db.py
 datatrac/core/manager.py
 datatrac/core/models.py
 datatrac/core/utils.py
+datatrac/web
+datatrac/web/app.py
+main.py
