@@ -1,5 +1,5 @@
 # datatrac/core/models.py
-import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean
 from sqlalchemy.orm import relationship
 from .db import Base
@@ -11,7 +11,7 @@ class Dataset(Base):
     name = Column(String, index=True)
     source = Column(String, nullable=True)
     registry_path = Column(String, unique=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
 
     # NEW: The flag for soft deletes. Defaults to True for all new datasets.
