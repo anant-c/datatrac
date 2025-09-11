@@ -9,6 +9,7 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 body {
@@ -16,7 +17,6 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
-  transition: background 0.2s ease, color 0.2s ease;
 }
 
 /* Light Theme (default) */
@@ -39,7 +39,7 @@ body.dark-mode {
   --danger: #f87171;
 }
 
-/* Layout Helpers */
+/* Layout */
 header {
   background: var(--card-bg);
   padding: 1rem 2rem;
@@ -54,14 +54,13 @@ header h1 {
   font-weight: 600;
 }
 
-/* Card Sections */
 section {
   background: var(--card-bg);
   margin: 2rem auto;
   padding: 1.5rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
-  max-width: 900px;
+  max-width: 90%;
   box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 
@@ -71,42 +70,14 @@ h2 {
   font-weight: 500;
 }
 
-/* Buttons */
-button, a.button-link {
-  background: var(--primary);
-  color: #fff;
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 0.5rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
-  text-decoration: none;
-}
-
-button:hover, a.button-link:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
-}
-
-button:active, a.button-link:active {
-  transform: translateY(0);
-}
-
-/* Danger Button */
-button.danger {
-  background: var(--danger);
-}
-
-button.danger:hover {
-  background: #dc2626;
-}
-
 /* Table */
 table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 1rem;
+  table-layout: auto;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 thead {
@@ -117,14 +88,34 @@ th, td {
   padding: 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 tbody tr:nth-child(even) {
   background: rgba(0,0,0,0.02);
 }
-
 tbody tr:hover {
   background: rgba(59,130,246,0.1);
+}
+
+/* Adjust widths for hash and source columns */
+td:nth-child(2), th:nth-child(2) {
+  width: 100%;
+  white-space: normal;
+  word-break: break-all;
+}
+/* Allow actions column (last one) to wrap */
+td:last-child, th:last-child {
+  white-space: normal;  /* buttons can wrap */
+  word-break: keep-all; /* keep button labels intact */
+}
+
+/* Optional: make buttons wrap neatly inside cell */
+td:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
 /* Links */
@@ -133,88 +124,46 @@ a {
   text-decoration: none;
 }
 
-a:hover {
-  text-decoration: underline;
-}
-
-/* Make all action links appear as buttons with consistent shape */
-a.button-link {
+/* Unified Button Styles */
+button, a.button-link {
   display: inline-block;
-  padding: 0.25rem 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
+  padding: 0.25em 0.75em;
+  margin: 0.25em;
+  font-size: 1rem;
+  font-weight: bold;
   text-align: center;
-  transition: background 0.2s ease, color 0.2s ease;
   cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  color: white;
+  border: none;
+  border-radius: 50em;
 }
 
-/* Specific colors for actions */
+/* Action Button Variants */
 .view-btn {
   background-color: var(--primary);
-  color: white;
 }
 .view-btn:hover {
   background-color: #2563eb;
 }
 
 .lineage-btn {
-  background-color: #22c55e; /* green */
-  color: white;
+  background-color: #888a00;
 }
 .lineage-btn:hover {
-  background-color: #16a34a;
+  background-color: #60611b;
 }
 
 .download-btn {
-  background-color: var(--primary);
-  color: white;
+  background-color: #00790a;
 }
 .download-btn:hover {
-  background-color: #2563eb;
+  background-color: #628665;
 }
 
-/* Existing danger button for delete */
 button.danger {
   background: var(--danger);
-  color: #fff;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.875rem;
-  border-radius: 0.5rem;
 }
-
 button.danger:hover {
   background: #dc2626;
 }
-
-/* Dataset table full width and text wrap improvements */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-  word-wrap: break-word;
-  word-break: break-word;
-  table-layout: fixed; /* Helps controlling wrapping */
-}
-
-th, td {
-  padding: 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-  vertical-align: middle;
-  white-space: normal; /* Allow wrapping */
-}
-
-/* Responsive adjustments for long text */
-td:nth-child(2), /* Hash */ 
-td:nth-child(3) /* Source */ {
-  width: 150px; /* Fixed width with wrap */
-  overflow-wrap: break-word;
-}
-
-
-/* Transition Everywhere */
-* {
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
