@@ -4,7 +4,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from datatrac.core.db import get_db
-from datatrac.core.manager import DataManager
+from datatrac.core.manager import DataManager, get_current_user
 
 app = typer.Typer(help="Fetch dataset information from the registry.")
 console = Console()
@@ -15,9 +15,6 @@ def fetch(
     list_all: Annotated[bool, typer.Option("--all", "-a", help="List all datasets in the registry.")] = False,
     download: Annotated[bool, typer.Option("--download", help="Download the specified dataset.")] = False,
 ):
-    """
-    Fetch details, list all, or download datasets.
-    """
     db = next(get_db())
     manager = DataManager(db)
 
@@ -26,8 +23,10 @@ def fetch(
             console.print("[bold red]Error:[/bold red] You must provide a dataset hash to download.")
             raise typer.Exit(code=1)
         try:
-            downloaded_path = manager.download_dataset(hash_prefix)
-            console.print(f"✅ Dataset downloaded successfully to: [green]{downloaded_path}[/green]")
+            path, message = manager.download_dataset(hash_prefix)
+            console.print(f"✅ {message}")
+            if path:
+                console.print(f"   Path: [green]{path}[/green]")
         except (FileNotFoundError, RuntimeError) as e:
             console.print(f"[bold red]Error:[/bold red] {e}")
         return
@@ -37,10 +36,13 @@ def fetch(
         if not datasets:
             console.print("No datasets found in the registry.")
             return
-
-        table = Table("Name", "Hash","Local Path" ,"Source", "Created At")
+        
+        console.print(f"Viewing as user: [bold yellow]{get_current_user()}[/bold yellow]")
+        table = Table("Name", "Hash", "Your Local Path", "Created At")
         for ds in datasets:
-            table.add_row(ds.name, f"{ds.hash}", ds.local_path or "N/A", ds.source or "N/A", str(ds.created_at))
+            local_path = manager.find_local_path_for_user(ds.hash)
+            local_path_display = str(local_path) if local_path else "N/A (Remote)"
+            table.add_row(ds.name, ds.hash, local_path_display, str(ds.created_at))
         console.print(table)
         
     elif hash_prefix:
