@@ -11,17 +11,18 @@
 <body>
   <header>
     <h1>Dataset Details - {{ dataset.name }}</h1>
-    <a href="{{ url_for('home') }}">← Back to Dataset List</a>
+    <a href="{{ url_for('home') }}" class="button-link view-btn back-btn">← Back to Dataset List</a>
   </header>
+
 
   <section id="details-section">
     <h2>Metadata</h2>
     <p><strong>Full Hash:</strong> {{ dataset.hash }}</p>
     <p><strong>Original Local Path:</strong> {{ dataset.local_path }}</p>
     <p><strong>Registry Path:</strong> {{ dataset.registry_path }}</p>
-    <p><strong>Created At:</strong> {{ dataset.created_at }}</p>
+    <p><strong>Created At:</strong> {{ dataset.created_at.strftime("%b %d, %Y %I:%M %p") }}</p>
 
-    <h3>Edit Metadata</h3>
+    <!-- <h3>Edit Metadata</h3>
     <form action="{{ url_for('edit', file_hash=dataset.hash) }}" method="post">
       <label for="name">Name:</label>
       <input type="text" name="name" id="name" value="{{ dataset.name }}" required />
@@ -30,7 +31,7 @@
       <input type="text" name="source" id="source" value="{{ dataset.source or '' }}" />
 
       <button type="submit">Update</button>
-    </form>
+    </form> -->
   </section>
 
   <section id="lineage-link">

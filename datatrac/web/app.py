@@ -1,5 +1,4 @@
 # web/app.py
-
 from flask import Flask, request, redirect, url_for, send_file, render_template, jsonify
 from pathlib import Path
 import os
@@ -88,6 +87,17 @@ def lineage(file_hash):
     data = manager.get_lineage(file_hash)
     dataset = manager.find_by_hash(file_hash)
     return render_template("lineage.html", dataset=dataset, lineage=data)
+
+def sizeof_fmt(num, suffix="B"):
+    """Convert bytes to human-readable MB/GB."""
+    for unit in ["", "K", "M", "G", "T"]:
+        if abs(num) < 1024.0:
+            return f"{num:3.1f} {unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f} P{suffix}"
+
+app.jinja_env.filters["sizeof_fmt"] = sizeof_fmt
+
 
 if __name__ == "__main__":
     app.run(debug=True)
