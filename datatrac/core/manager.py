@@ -3,6 +3,7 @@ import subprocess
 import getpass
 from pathlib import Path
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from . import models, utils
 from .config import REMOTE_TARGET, REMOTE_STORAGE_PATH
@@ -25,7 +26,25 @@ class DataManager:
         return self.db.query(models.Dataset).filter_by(hash=file_hash).first()
 
     def find_all(self):
-        return self.db.query(models.Dataset).order_by(models.Dataset.created_at.desc()).all()
+        """
+        Finds all datasets that are either active in the registry OR 
+        that the current user has a local copy of.
+        """
+        user = get_current_user()
+        
+        # Subquery to get all dataset hashes the current user has locally
+        local_hashes_subquery = self.db.query(models.LocalCopy.dataset_hash).filter(
+            models.LocalCopy.user_identifier == user
+        ).subquery()
+
+        # Main query
+        query = self.db.query(models.Dataset).filter(
+            or_(
+                models.Dataset.is_active == True,
+                models.Dataset.hash.in_(local_hashes_subquery)
+            )
+        )
+        return query.order_by(models.Dataset.created_at.desc()).all()
 
     def find_local_path_for_user(self, file_hash: str):
         user = get_current_user()
@@ -42,22 +61,35 @@ class DataManager:
             self.db.add(copy)
         self.db.commit()
 
+
     def push_dataset(self, local_path_str: str, source: str | None = None):
         local_path = Path(local_path_str).resolve()
         if not local_path.exists():
             raise FileNotFoundError(f"File not found: {local_path}")
+
         file_hash = utils.hash_file(str(local_path))
         dataset = self.find_by_hash(file_hash)
+        was_uploaded = False  # Initialize flag
+
         if not dataset:
             print("Dataset not found in global registry. Uploading...")
             registry_path = f"{REMOTE_STORAGE_PATH}/{file_hash}{local_path.suffix}"
             run_command(["scp", str(local_path), f"{REMOTE_TARGET}:{registry_path}"])
-            dataset = models.Dataset(hash=file_hash, name=local_path.name, source=source, registry_path=registry_path)
+            dataset = models.Dataset(
+                hash=file_hash, 
+                name=local_path.name, 
+                source=source, 
+                registry_path=registry_path
+            )
             self.db.add(dataset)
+            was_uploaded = True # Set flag to True on new upload
         else:
             print(f"Dataset with hash {file_hash[:8]}... already exists in global registry.")
+
         self._get_or_create_local_copy(file_hash, str(local_path))
-        return dataset
+        
+        # Return both the dataset object and the flag
+        return dataset, was_uploaded
 
     def download_dataset(self, file_hash: str, destination_dir: str = "."):
         # Feature: Prevent re-download
@@ -69,6 +101,10 @@ class DataManager:
         if not dataset:
             raise FileNotFoundError(f"Dataset with hash {file_hash} not found in the registry.")
         
+        # NEW: Prevent downloading a deregistered file
+        if not dataset.is_active:
+            raise FileNotFoundError("Cannot download: This dataset has been deregistered by an admin and is no longer available on the server.")
+        
         local_destination = Path(destination_dir).resolve() / dataset.name
         remote_source = f"{REMOTE_TARGET}:{dataset.registry_path}"
         print(f"Downloading from {REMOTE_TARGET}...")
@@ -77,15 +113,24 @@ class DataManager:
         return local_destination, "Download complete."
 
     def delete_dataset(self, file_hash: str):
-        """Admin Function: Deletes a dataset from the remote registry and DB."""
+        """
+        Admin Function: Deregisters a dataset. It marks it as inactive
+        and deletes the file from the remote server.
+        """
         dataset = self.find_by_hash(file_hash)
         if not dataset:
             return False, f"Dataset with hash {file_hash} not found."
+            
+        if not dataset.is_active:
+            return False, "This dataset has already been deregistered."
+
         print(f"Deleting remote file: {dataset.registry_path}")
         run_command(["ssh", REMOTE_TARGET, f"rm {dataset.registry_path}"])
-        self.db.delete(dataset)
+        
+        # UPDATE instead of DELETE
+        dataset.is_active = False
         self.db.commit()
-        return True, "Dataset and all associated records have been deleted from the registry."
+        return True, "Dataset has been deregistered. Users with local copies can still see it."
 
     def delete_local_copy(self, file_hash: str):
         """User Function: Deletes a dataset from the local machine only."""

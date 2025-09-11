@@ -38,23 +38,33 @@ def fetch(
             return
         
         console.print(f"Viewing as user: [bold yellow]{get_current_user()}[/bold yellow]")
-        table = Table("Name", "Hash", "Your Local Path", "Created At")
+        table = Table("Name", "Hash", "Your Local Path", "Status")
         for ds in datasets:
+            # Determine the display name and status based on the is_active flag
+            status = "[green]Active[/green]"
+            if not ds.is_active:
+                status = "[dim red]Deregistered[/dim red] (Local-Only)"
+
             local_path = manager.find_local_path_for_user(ds.hash)
             local_path_display = str(local_path) if local_path else "N/A (Remote)"
-            table.add_row(ds.name, ds.hash, local_path_display, str(ds.created_at))
+            
+            table.add_row(ds.name, ds.hash, local_path_display, status)
         console.print(table)
-        
+        return
     elif hash_prefix:
         dataset = manager.find_by_hash(hash_prefix)
         if not dataset:
             console.print(f"[bold red]Error:[/bold red] Dataset with hash '{hash_prefix}' not found.")
             return
+
+        # Get the local path specifically for the current user
+        user_local_path = manager.find_local_path_for_user(dataset.hash)
+        local_path_display = str(user_local_path) if user_local_path else "N/A (Not on this machine)"
             
-        console.print(f"[bold]Dataset Details for {dataset.name}[/bold]")
+        console.print(f"[bold]Dataset Details for [cyan]{dataset.name}[/cyan][/bold]")
         console.print(f"  [cyan]Full Hash:[/cyan] {dataset.hash}")
-        console.print(f"  [cyan]Source:[/cyan] {dataset.source or 'N/A'}")
-        console.print(f"  [cyan]Original Path:[/cyan] {dataset.local_path}")
+        console.print(f"  [cyan]Source URL:[/cyan] {dataset.source or 'N/A'}")
+        console.print(f"  [cyan]Your Local Path:[/cyan] {local_path_display}")
         console.print(f"  [cyan]Registry Path:[/cyan] {dataset.registry_path}")
         console.print(f"  [cyan]Created At:[/cyan] {dataset.created_at}")
     else:

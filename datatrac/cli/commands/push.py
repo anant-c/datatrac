@@ -19,9 +19,16 @@ def push(
     try:
         db_session = next(get_db())
         manager = DataManager(db_session)
-        dataset = manager.push_dataset(local_path, source)
-        console.print(f"✅ Dataset '[bold cyan]{dataset.name}[/bold cyan]' pushed successfully!")
+        # Capture both the dataset and the new boolean flag
+        dataset, was_uploaded = manager.push_dataset(local_path, source)
+
+        # Only print the "success" message if a new upload happened
+        if was_uploaded:
+            console.print(f"✅ Dataset '[bold cyan]{dataset.name}[/bold cyan]' pushed successfully!")
+        
+        # Always print the hash
         console.print(f"   Hash: [yellow]{dataset.hash}[/yellow]")
+
     except FileNotFoundError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
     except Exception as e:
