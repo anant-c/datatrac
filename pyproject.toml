@@ -9,6 +9,7 @@ dependencies = [
     "rich>=14.1.0",
     "typer>=0.16.1",
     "sqlalchemy>=2.0.30",
+    "flask>=3.1.2",
 ]
 
 [project.scripts]

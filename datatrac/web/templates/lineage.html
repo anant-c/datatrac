@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lineage - {{ dataset.name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  <style>
+    /* Simple horizontal boxes with arrows */
+    .lineage-container {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+    .lineage-box {
+      border: 1px solid #444;
+      padding: 1rem;
+      width: 150px;
+      text-align: center;
+      border-radius: 8px;
+      background-color: #f0f0f0;
+    }
+    .arrow {
+      font-size: 2rem;
+      align-self: center;
+    }
+    .section-title {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lineage for {{ dataset.name }}</h1>
+    <a href="{{ url_for('details', file_hash=dataset.hash) }}">← Back to Details</a>
+  </header>
+
+  <section>
+    <div class="section-title">Parents (Derived From)</div>
+    <div class="lineage-container">
+      {% if lineage.parents %}
+        {% for parent in lineage.parents %}
+          <div class="lineage-box" title="{{ parent.hash }}">{{ parent.name }}</div>
+          {% if not loop.last %}
+          <div class="arrow">→</div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p style="text-align:center;">No parents found.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">Children (Derived To)</div>
+    <div class="lineage-container">
+      {% if lineage.children %}
+        {% for child in lineage.children %}
+          <div class="lineage-box" title="{{ child.hash }}">{{ child.name }}</div>
+          {% if not loop.last %}
+          <div class="arrow">→</div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p style="text-align:center;">No children found.</p>
+      {% endif %}
+    </div>
+  </section>
+</body>
+</html>
