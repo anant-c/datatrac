@@ -9,6 +9,9 @@ dependencies = [
     "rich>=14.1.0",
     "typer>=0.16.1",
     "sqlalchemy>=2.0.30",
+    "psycopg2-binary>=2.9.9",
+    "alembic>=1.13.1",
+    "fastapi[standard]>=0.116.1",       
 ]
 
 [project.scripts]
