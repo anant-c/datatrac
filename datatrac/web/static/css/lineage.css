@@ -1,0 +1,54 @@
+/* =========================
+   Lineage Page Specific Styles
+   ========================= */
+
+.section-title {
+  text-align: center;
+  margin: 1.5rem 0 1rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.lineage-container {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin: 1.5rem 0;
+  flex-wrap: wrap;
+}
+
+/* Dataset Box */
+.lineage-box {
+  border: 1px solid var(--border);
+  padding: 1rem;
+  width: 150px;
+  text-align: center;
+  border-radius: 0.75rem;
+  background-color: var(--card-bg);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: transform 0.2s ease, background 0.2s ease;
+  cursor: default;
+}
+
+.lineage-box:hover {
+  transform: translateY(-3px);
+  background: rgba(59,130,246,0.05);
+}
+
+/* Arrow between boxes */
+.arrow {
+  font-size: 2rem;
+  align-self: center;
+  color: var(--text);
+}
+
+/* No results message */
+.lineage-container p {
+  text-align: center;
+  width: 100%;
+  color: var(--text);
+  font-style: italic;
+}

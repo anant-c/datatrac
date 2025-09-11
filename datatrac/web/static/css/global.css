@@ -1,0 +1,143 @@
+/* =========================
+   Global Styles
+   ========================= */
+
+/* Font + Reset */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Light Theme (default) */
+:root {
+  --bg: #f9fafb;
+  --text: #111827;
+  --card-bg: #ffffff;
+  --border: #e5e7eb;
+  --primary: #3b82f6;
+  --danger: #ef4444;
+}
+
+/* Dark Theme */
+body.dark-mode {
+  --bg: #1f2937;
+  --text: #f9fafb;
+  --card-bg: #111827;
+  --border: #374151;
+  --primary: #60a5fa;
+  --danger: #f87171;
+}
+
+/* Layout Helpers */
+header {
+  background: var(--card-bg);
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* Card Sections */
+section {
+  background: var(--card-bg);
+  margin: 2rem auto;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  max-width: 900px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+/* Buttons */
+button, a.button-link {
+  background: var(--primary);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+  text-decoration: none;
+}
+
+button:hover, a.button-link:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+button:active, a.button-link:active {
+  transform: translateY(0);
+}
+
+/* Danger Button */
+button.danger {
+  background: var(--danger);
+}
+
+button.danger:hover {
+  background: #dc2626;
+}
+
+/* Table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+thead {
+  background: var(--bg);
+}
+
+th, td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(0,0,0,0.02);
+}
+
+tbody tr:hover {
+  background: rgba(59,130,246,0.1);
+}
+
+/* Links */
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Transition Everywhere */
+* {
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
