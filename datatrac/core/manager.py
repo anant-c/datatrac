@@ -1,9 +1,9 @@
-# datatrac/core/manager.py
 import subprocess
 import getpass
 from pathlib import Path
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, select
+from datetime import datetime, timezone
 
 from . import models, utils
 from .config import REMOTE_TARGET, REMOTE_STORAGE_PATH
@@ -33,9 +33,9 @@ class DataManager:
         user = get_current_user()
         
         # Subquery to get all dataset hashes the current user has locally
-        local_hashes_subquery = self.db.query(models.LocalCopy.dataset_hash).filter(
+        local_hashes_subquery = select(models.LocalCopy.dataset_hash).where(
             models.LocalCopy.user_identifier == user
-        ).subquery()
+        )
 
         # Main query
         query = self.db.query(models.Dataset).filter(
@@ -75,11 +75,16 @@ class DataManager:
             print("Dataset not found in global registry. Uploading...")
             registry_path = f"{REMOTE_STORAGE_PATH}/{file_hash}{local_path.suffix}"
             run_command(["scp", str(local_path), f"{REMOTE_TARGET}:{registry_path}"])
+
+            # NEW: Get file size during push
+            file_size = local_path.stat().st_size
+
             dataset = models.Dataset(
                 hash=file_hash, 
                 name=local_path.name, 
                 source=source, 
-                registry_path=registry_path
+                registry_path=registry_path,
+                size_bytes=file_size
             )
             self.db.add(dataset)
             was_uploaded = True # Set flag to True on new upload
@@ -92,7 +97,6 @@ class DataManager:
         return dataset, was_uploaded
 
     def download_dataset(self, file_hash: str, destination_dir: str = "."):
-        # Feature: Prevent re-download
         existing_path = self.find_local_path_for_user(file_hash)
         if existing_path:
             return existing_path, "Dataset already exists locally at the path below."
@@ -110,6 +114,11 @@ class DataManager:
         print(f"Downloading from {REMOTE_TARGET}...")
         run_command(["scp", remote_source, str(local_destination)])
         self._get_or_create_local_copy(file_hash, str(local_destination))
+
+
+        dataset.download_count += 1
+        dataset.last_downloaded_at = datetime.now(timezone.utc)
+        self.db.commit()
         return local_destination, "Download complete."
 
     def delete_dataset(self, file_hash: str):

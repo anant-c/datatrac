@@ -1,6 +1,5 @@
-# datatrac/core/models.py
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean
+from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, BigInteger
 from sqlalchemy.orm import relationship
 from .db import Base
 
@@ -12,10 +11,14 @@ class Dataset(Base):
     source = Column(String, nullable=True)
     registry_path = Column(String, unique=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
     
 
     # NEW: The flag for soft deletes. Defaults to True for all new datasets.
     is_active = Column(Boolean, default=True, nullable=False)
+    size_bytes = Column(BigInteger, nullable=True)
+    download_count = Column(BigInteger, default=0, nullable=False)
+    last_downloaded_at = Column(DateTime, nullable=True)
 
     # This relationship links a dataset to all its local copies.
     # When a Dataset is deleted, all its LocalCopy records are also deleted.
