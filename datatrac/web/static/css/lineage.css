@@ -52,3 +52,29 @@
   color: var(--text);
   font-style: italic;
 }
+
+
+/* Enhance back link to look like a button */
+.back-btn {
+  display: inline-block;
+  padding: 0.4em 1em;
+  font-size: 1rem;
+  border-radius: 0.5rem;
+  margin-left: auto;
+  transition: background-color 0.3s ease;
+}
+
+/* Align header items: space between h1 and back button */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Optional: add a hover effect for back button */
+.back-btn:hover {
+  background-color: #2563eb; /* Slightly darker blue */
+  color: white;
+  text-decoration: none;
+  cursor: pointer;
+}

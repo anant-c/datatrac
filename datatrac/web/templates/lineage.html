@@ -38,8 +38,9 @@
 <body>
   <header>
     <h1>Lineage for {{ dataset.name }}</h1>
-    <a href="{{ url_for('details', file_hash=dataset.hash) }}">← Back to Details</a>
+    <a href="{{ url_for('details', file_hash=dataset.hash) }}" class="button-link view-btn back-btn">← Back to Details</a>
   </header>
+
 
   <section>
     <div class="section-title">Parents (Derived From)</div>
