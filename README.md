@@ -1,133 +1,118 @@
-# DataTrac - Dataset Management & Lineage Tool
-
-DataTrac helps you **discover, manage, and trace datasets**. It combines a CLI for power users with a FastAPI + React web dashboard for interactive exploration.
-
----
+# datatrac - Dataset Discovery, Registry, and Lineage Tool
 
 ## Installation
 
-1. **Clone the repository**
+**Install dependencies**:
 
    ```bash
-   git clone https://github.com/yourname/datatrac.git
-   cd datatrac
+   pip install --extra-index-url https://test.pypi.org/simple/ datatrac==0.0.5
    ```
-
-2. **Install dependencies using [uv](https://github.com/astral-sh/uv)**
-
-   ```bash
-   uv pip install -r requirements.txt
-   ```
-
-3. **Run in editable mode** (so you can use the CLI and API directly):
-
-   ```bash
-   uv pip install -e .
-   ```
-
----
 
 ## Quick Start
 
-### CLI Usage
-
-Run CLI commands using `uv run`:
-
-#### List all datasets
+### Push your first dataset
 
 ```bash
-uv run python -m datatrac.cli.main fetch -a
+datatrac push --source "https://example.com/" path/to/data.csv
 ```
 
-#### Fetch details of a dataset
+### Fetch dataset details
 
 ```bash
-uv run python -m datatrac.cli.main fetch <dataset_hash>
+datatrac fetch <dataset-hash>
 ```
 
-#### Download a dataset
+### Download dataset
 
 ```bash
-uv run python -m datatrac.cli.main fetch <dataset_hash> --download
+datatrac fetch --download <dataset-hash>
 ```
 
-#### Push a new dataset
+### List all datasets
 
 ```bash
-uv run python -m datatrac.cli.main push path/to/file.csv --source "http://example.com/data"
+datatrac fetch --all
+--OR--
+datatrac fetch -a
 ```
 
-#### View or create lineage
+### View dataset lineage
 
 ```bash
-# View lineage
-uv run python -m datatrac.cli.main lineage <dataset_hash>
-
-# Create a lineage link
-uv run python -m datatrac.cli.main lineage --parent <parent_hash> --child <child_hash>
+datatrac lineage <dataset-hash>
 ```
 
-#### Delete a dataset
+### Create lineage between datasets
 
 ```bash
-# Delete locally only
-uv run python -m datatrac.cli.main delete <dataset_hash> --local
-
-# Delete remotely (admin only)
-uv run python -m datatrac.cli.main delete <dataset_hash> --password admin
+datatrac lineage --parent <parent-hash> --child <child-hash>
 ```
 
----
+### Delete a dataset (Admin)
 
-### Web Dashboard
-
-Start the FastAPI + React dashboard:
+⚠️ Admin-only operation. Uses a hardcoded password (default: `admin`).
 
 ```bash
-cd datatrac/api
-uv run fastapi run
+datatrac delete <dataset-hash>
 ```
 
-Then open your browser at:
+### Delete only local copy
 
+```bash
+datatrac delete --local <dataset-hash> 
 ```
-http://localhost:8000
+
+## Web Dashboard
+
+### Start the API server
+
+```bash
+datatracweb
 ```
 
-The dashboard includes:
+### Access the dashboard
 
-* **Dataset browser**: List and search datasets
-* **Lineage explorer**: View parent/child relationships
-* **Metadata view**: Size, source, registry path, and download stats
+Open your browser at: **[http://localhost:8000](http://localhost:8000)**
 
----
+The dashboard shows:
+
+* Dataset browser with search
+* Top Downloaded Datasets
+* Dataset details (size, hash, source, downloads, last download, creation date)
+* Upload support
+* Lineage Tracking
+
+### Screenshots of Web Dashboard
+Home Page
+![Home Page](utils/images/image.png)
+
+Dataset Details and Lineage View
+![Lineage](utils/images/image-2.png)
+
+Upload View
+![Upload Dialog](utils/images/image-3.png)
 
 ## Key Commands
 
-| Command   | Description                        | Example                          |
-| --------- | ---------------------------------- | -------------------------------- |
-| `fetch`   | Retrieve dataset info or download  | `fetch <hash> --download`        |
-| `push`    | Register a new dataset             | `push data.csv --source "url"`   |
-| `lineage` | View or create lineage links       | `lineage --parent h1 --child h2` |
-| `delete`  | Remove dataset locally or remotely | `delete <hash> --local`          |
+| Command    | Description                        | Example                                 |
+| ---------- | ---------------------------------- | --------------------------------------- |
+| `push`     | Register a new dataset             | `datatrac push data.csv --source "url"` |
+| `fetch`    | Show dataset info or download      | `datatrac fetch <hash>`                 |
+| `fetch -a` | List all datasets                  | `datatrac fetch --all`                  |
+| `lineage`  | View or create lineage links       | `datatrac lineage <hash>`               |
+| `delete`   | Deregister or delete local dataset | `datatrac delete --local <hash> `        |
 
----
+## Dataset Identification
 
-## How It Works
+Datasets can be referenced by:
 
-* **Hashing**: Every dataset file is identified by a unique SHA256 hash.
-* **Registry**: Metadata is stored in a PostgreSQL database.
-* **Remote storage**: Files are uploaded via `scp` to a central server.
-* **Lineage tracking**: Relationships between parent and derived datasets are recorded.
-* **Web UI**: React frontend lets you browse datasets visually.
+* **Name**: original filename (e.g., `data.csv`)
 
----
+## Notes
 
-## For Developers
+* Default admin password is **hardcoded** as `admin` (for proof of concept).
+* Works with Python **3.12+** and uses **uv**, **typer**, **FastAPI**, **ReactJS** for package, command management and web dashboard.
+* Frontend (React) is shipped prebuilt, no need for manual build required as static HTML is served through FastAPI.
 
-* Database schema is defined in `datatrac/core/models.py`
-* Business logic in `datatrac/core/manager.py`
-* API in `datatrac/api/main.py`
-* CLI in `datatrac/cli/main.py`
 
-Contributions are welcome!
+
