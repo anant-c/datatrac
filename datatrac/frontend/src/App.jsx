@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { DatasetCard } from './components/DatasetCard';
@@ -11,7 +12,7 @@ function App() {
     const [datasets, setDatasets] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDataset, setSelectedDataset] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(false); 
     const [error, setError] = useState(null);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
@@ -91,6 +92,7 @@ function App() {
                         dataset={selectedDataset}
                         onDatasetUpdate={handleDatasetUpdate}
                         onDatasetDeleted={handleDatasetDeleted}
+                        onSelectDataset={setSelectedDataset}
                     />
                 </aside>
             </main>
