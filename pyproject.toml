@@ -11,11 +11,13 @@ dependencies = [
     "sqlalchemy>=2.0.30",
     "psycopg2-binary>=2.9.9",
     "alembic>=1.13.1",
-    "fastapi[standard]>=0.116.1",       
+    "fastapi>=0.111.0",       
+    "uvicorn[standard]>=0.29.0"       
 ]
 
 [project.scripts]
-datatrac = "src.cli.main:app"
+datatrac = "datatrac.cli.main:app"
+datatracweb = "datatrac.api.server:start"
 
 
 [tool.uv]

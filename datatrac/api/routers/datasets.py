@@ -109,3 +109,15 @@ def delete_dataset(
     if not success:
         raise HTTPException(status_code=404, detail=message)
     return {"message": message}
+
+@router.get("/{dataset_hash}/lineage", response_model=schemas.LineageResponse)
+def get_dataset_lineage(dataset_hash: str, db: Session = Depends(get_db)):
+    """
+    Get the parent and child lineage for a specific dataset.
+    """
+    manager = DataManager(db)
+    try:
+        lineage_data = manager.get_lineage(dataset_hash)
+        return lineage_data
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))

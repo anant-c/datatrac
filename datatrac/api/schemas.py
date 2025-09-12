@@ -1,5 +1,6 @@
 # datatrac/api/schemas.py
 import datetime
+from typing import List
 from pydantic import BaseModel
 
 # Schema for creating a lineage link
@@ -24,3 +25,14 @@ class DatasetBase(BaseModel):
 class Dataset(DatasetBase):
     class Config:
         from_attributes = True # Replaces orm_mode in Pydantic v2   
+
+
+# NEW: A minimal schema for lineage links
+class DatasetSummary(BaseModel):
+    hash: str
+    name: str
+
+# NEW: The response model for the lineage endpoint
+class LineageResponse(BaseModel):
+    parents: List[DatasetSummary]
+    children: List[DatasetSummary]
