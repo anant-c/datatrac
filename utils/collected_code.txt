@@ -1,0 +1,811 @@
+
+=== datatrac/api/main.py ===
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
+from .routers import datasets
+
+app = FastAPI(
+    title="DataTrac API",
+    description="An API for discovering, managing, and tracing data files.",
+    version="0.1.0",
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],  
+    allow_headers=["*"],  
+)
+
+# Include dataset router
+app.include_router(datasets.router)
+
+# Path to your React build
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "web")
+
+# Mount static files
+app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
+
+# Serve index.html at root and catch-all
+@app.get("/")
+async def serve_root():
+    return FileResponse(os.path.join(frontend_path, "index.html"))
+
+@app.get("/{full_path:path}")
+async def serve_react_app(full_path: str):
+    """
+    Catch-all route to serve React's index.html
+    so React Router works with client-side routes.
+    """
+    index_file = os.path.join(frontend_path, "index.html")
+    return FileResponse(index_file)
+
+
+=== datatrac/api/routers/datasets.py ===
+# datatrac/api/routers/datasets.py
+import shutil
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
+from sqlalchemy.orm import Session
+from datetime import datetime, timezone
+
+from datatrac.core.db import get_db
+from datatrac.core.manager import DataManager
+from .. import schemas
+
+router = APIRouter(
+    prefix="/datasets",
+    tags=["datasets"],
+)
+
+# Endpoint to list all available datasets
+@router.get("/", response_model=List[schemas.Dataset])
+def list_datasets(db: Session = Depends(get_db)):
+    """
+    Retrieve a list of all datasets visible to the user.
+    This mirrors the `datatrac fetch -a` command.
+    """
+    manager = DataManager(db)
+    datasets = manager.find_all()
+    return datasets
+
+# Endpoint to get details for a single dataset
+@router.get("/{dataset_hash}", response_model=schemas.Dataset)
+def get_dataset_details(dataset_hash: str, db: Session = Depends(get_db)):
+    """
+    Get detailed information for a single dataset by its hash.
+    Mirrors `datatrac fetch {hash}`.
+    """
+    manager = DataManager(db)
+    dataset = manager.find_by_hash(dataset_hash)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return dataset
+
+# Endpoint to upload a new dataset
+@router.post("/upload", response_model=schemas.Dataset)
+async def upload_dataset(
+    source: str = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a new dataset file. Mirrors `datatrac push`.
+    The file is sent as multipart/form-data.
+    """
+    # Save the uploaded file to a temporary path
+    temp_path = f"/tmp/{file.filename}"
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    manager = DataManager(db)
+    try:
+        dataset, _ = manager.push_dataset(temp_path, source=source)
+        return dataset
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint to trigger a download (updates stats)
+@router.post("/{dataset_hash}/download", response_model=schemas.Dataset)
+def trigger_download(dataset_hash: str, db: Session = Depends(get_db)):
+    """
+    Triggers the download logic for a dataset, which increments its
+    download count and updates the timestamp.
+
+    Note: This endpoint does not stream the file back. It simulates a
+    download event and returns the updated dataset metadata.
+    """
+    manager = DataManager(db)
+    try:
+        # The download_dataset method now handles stats updates
+        # We don't need the returned path in the API context
+        dataset = manager.find_by_hash(dataset_hash)
+        if not dataset:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+            
+        dataset.download_count += 1
+        dataset.last_downloaded_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(dataset)
+        return dataset
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+# Endpoint to delete a dataset (Admin)
+@router.delete("/{dataset_hash}")
+def delete_dataset(
+    dataset_hash: str,
+    x_admin_password: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Deregisters a dataset from the registry. Requires an admin password
+    passed in the 'X-Admin-Password' header.
+    """
+    from datatrac.cli.commands.delete import ADMIN_PASSWORD # Reuse password
+    if x_admin_password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=403, detail="Invalid admin password")
+        
+    manager = DataManager(db)
+    success, message = manager.delete_dataset(dataset_hash)
+    if not success:
+        raise HTTPException(status_code=404, detail=message)
+    return {"message": message}
+
+=== datatrac/api/schemas.py ===
+# datatrac/api/schemas.py
+import datetime
+from pydantic import BaseModel
+
+# Schema for creating a lineage link
+class LineageCreate(BaseModel):
+    parent_hash: str
+    child_hash: str
+
+# Base schema for a dataset, used for sharing common fields
+class DatasetBase(BaseModel):
+    hash: str
+    name: str
+    source: str | None = None
+    registry_path: str
+    created_at: datetime.datetime
+    is_active: bool
+    size_bytes: int | None = None
+    download_count: int
+    last_downloaded_at: datetime.datetime | None = None
+
+# Full schema for returning a dataset from the API
+# It includes orm_mode = True to work directly with SQLAlchemy models
+class Dataset(DatasetBase):
+    class Config:
+        from_attributes = True # Replaces orm_mode in Pydantic v2   
+
+=== datatrac/cli/commands/delete.py ===
+# datatrac/cli/commands/delete.py
+import typer
+from typing import Optional
+from typing_extensions import Annotated
+from rich.console import Console
+from datatrac.core.db import get_db
+from datatrac.core.manager import DataManager
+
+ADMIN_PASSWORD = "admin"
+app = typer.Typer(help="Delete a dataset remotely (admin) or locally.")
+console = Console()
+
+@app.callback(invoke_without_command=True)
+def delete(
+    hash_to_delete: Annotated[str, typer.Argument(help="Full hash of the dataset to delete.")],
+    local: Annotated[bool, typer.Option("--local", "-l", help="Delete the dataset from the local machine only.")] = False,
+    password: Annotated[Optional[str], typer.Option(help="Admin password for remote deletion.")] = None,
+):
+    db = next(get_db())
+    manager = DataManager(db)
+
+    if local:
+        success, message = manager.delete_local_copy(hash_to_delete)
+        if success:
+            console.print(f"✅ {message}")
+        else:
+            console.print(f"[bold red]Error:[/bold red] {message}")
+        return
+
+    # --- Remote Delete Logic ---
+    if not password:
+        password = typer.prompt("Admin password required for remote delete", hide_input=True)
+
+    if password != ADMIN_PASSWORD:
+        console.print("[bold red]Error: Invalid admin password.[/bold red]")
+        raise typer.Exit(code=1)
+    
+    success, message = manager.delete_dataset(hash_to_delete)
+    if success:
+        console.print(f"✅ {message}")
+    else:
+        console.print(f"[bold red]Error:[/bold red] {message}")
+
+=== datatrac/cli/commands/fetch.py ===
+# datatrac/cli/commands/fetch.py
+from typing import Annotated, Optional
+import typer
+from rich.console import Console
+from rich.table import Table
+from datatrac.core.db import get_db
+from datatrac.core.manager import DataManager, get_current_user
+
+app = typer.Typer(help="Fetch dataset information from the registry.")
+console = Console()
+
+
+def format_size(size_bytes):
+    if size_bytes is None:
+        return "N/A"
+    if size_bytes < 1024:
+        return f"{size_bytes} Bytes"
+    if size_bytes < 1024**2:
+        return f"{size_bytes/1024:.2f} KB"
+    if size_bytes < 1024**3:
+        return f"{size_bytes/1024**2:.2f} MB"
+    return f"{size_bytes/1024**3:.2f} GB"
+
+@app.callback(invoke_without_command=True)
+def fetch(
+    hash_prefix: Annotated[Optional[str], typer.Argument(help="The full hash of the dataset.")] = None,
+    list_all: Annotated[bool, typer.Option("--all", "-a", help="List all datasets in the registry.")] = False,
+    download: Annotated[bool, typer.Option("--download", help="Download the specified dataset.")] = False,
+):
+    db = next(get_db())
+    manager = DataManager(db)
+
+    if download:
+        if not hash_prefix:
+            console.print("[bold red]Error:[/bold red] You must provide a dataset hash to download.")
+            raise typer.Exit(code=1)
+        try:
+            path, message = manager.download_dataset(hash_prefix)
+            console.print(f"✅ {message}")
+            if path:
+                console.print(f"   Path: [green]{path}[/green]")
+        except (FileNotFoundError, RuntimeError) as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+        return
+
+    if list_all:
+        datasets = manager.find_all()
+        if not datasets:
+            console.print("No datasets found in the registry.")
+            return
+        
+        console.print(f"Viewing as user: [bold yellow]{get_current_user()}[/bold yellow]")
+        # NEW: Added Size to the table view
+        table = Table("Name", "Size", "Hash", "Your Local Path", "Status")
+        for ds in datasets:
+            status = "[green]Active[/green]"
+            if not ds.is_active:
+                status = "[dim red]Deregistered[/dim red] (Local-Only)"
+
+            local_path = manager.find_local_path_for_user(ds.hash)
+            local_path_display = str(local_path) if local_path else "N/A (Remote)"
+            table.add_row(ds.name, format_size(ds.size_bytes), ds.hash, local_path_display, status)
+        console.print(table)
+        return
+    elif hash_prefix:
+        dataset = manager.find_by_hash(hash_prefix)
+        if not dataset:
+            console.print(f"[bold red]Error:[/bold red] Dataset with hash '{hash_prefix}' not found.")
+            return
+
+        user_local_path = manager.find_local_path_for_user(dataset.hash)
+        local_path_display = str(user_local_path) if user_local_path else "N/A (Not on this machine)"
+        last_downloaded_display = str(dataset.last_downloaded_at) if dataset.last_downloaded_at else "Never"
+            
+        console.print(f"[bold]Dataset Details for [cyan]{dataset.name}[/cyan][/bold]")
+        console.print(f"  [cyan]Full Hash:[/cyan] {dataset.hash}")
+        console.print(f"  [cyan]Size:[/cyan] {format_size(dataset.size_bytes)}")
+        console.print(f"  [cyan]Source URL:[/cyan] {dataset.source or 'N/A'}")
+        console.print(f"  [cyan]Your Local Path:[/cyan] {local_path_display}")
+        console.print(f"  [cyan]Registry Path:[/cyan] {dataset.registry_path}")
+        console.print(f"  [cyan]Created At:[/cyan] {dataset.created_at}")
+        console.print(f"  [cyan]Download Count:[/cyan] {dataset.download_count}")
+        console.print(f"  [cyan]Last Downloaded:[/cyan] {last_downloaded_display}")
+    else:
+        console.print("Please specify a dataset hash or use the --all or --download flag.")
+
+=== datatrac/cli/commands/lineage.py ===
+# datatrac/cli/commands/lineage.py
+import typer
+from typing import Optional
+from typing_extensions import Annotated
+from rich.console import Console
+from rich.tree import Tree
+from datatrac.core.db import get_db
+from datatrac.core.manager import DataManager
+
+app = typer.Typer(help="Create or view dataset lineage.")
+console = Console()
+
+@app.callback(invoke_without_command=True)
+def lineage(
+    hash_to_view: Annotated[Optional[str], typer.Argument(help="The hash of the dataset to view lineage for.")] = None,
+    parent: Annotated[Optional[str], typer.Option("--parent", help="Hash of the parent dataset.")] = None,
+    child: Annotated[Optional[str], typer.Option("--child", help="Hash of the child (derived) dataset.")] = None,
+):
+    """
+    View lineage for a dataset OR create a new lineage link.
+
+    - To VIEW: datatrac lineage <hash>
+    - To CREATE: datatrac lineage --parent <hash1> --child <hash2>
+    """
+    db = next(get_db())
+    manager = DataManager(db)
+
+    # --- Mode 1: View Lineage ---
+    if hash_to_view:
+        try:
+            dataset = manager.find_by_hash(hash_to_view)
+            if not dataset:
+                console.print(f"[red]Dataset with hash {hash_to_view} not found.[/red]")
+                raise typer.Exit(1)
+            
+            lineage_data = manager.get_lineage(hash_to_view)
+
+            tree = Tree(f"⛓️ [bold]Lineage for [cyan]{dataset.name}[/cyan] ([yellow]{dataset.hash[:12]}...[/yellow])")
+            
+            # Add parents
+            if lineage_data["parents"]:
+                parent_branch = tree.add("🔼 [bold green]Parents[/bold green] (Derived From)")
+                for p in lineage_data["parents"]:
+                    parent_branch.add(f"[cyan]{p['name']}[/cyan] ([yellow]{p['hash'][:12]}...[/yellow])")
+            else:
+                 tree.add("🔼 No parents found.")
+
+            # Add children
+            if lineage_data["children"]:
+                child_branch = tree.add("🔽 [bold magenta]Children[/bold magenta] (Derived To)")
+                for c in lineage_data["children"]:
+                    child_branch.add(f"[cyan]{c['name']}[/cyan] ([yellow]{c['hash'][:12]}...[/yellow])")
+            else:
+                tree.add("🔽 No children found.")
+
+            console.print(tree)
+
+        except (FileNotFoundError, RuntimeError) as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+
+    # --- Mode 2: Create Lineage ---
+    elif parent and child:
+        try:
+            manager.create_lineage(parent_hash=parent, child_hash=child)
+            console.print(
+                "✅ Lineage created: "
+                f"[yellow]{parent[:8]}...[/yellow] -> [green]{child[:8]}...[/green]"
+            )
+        except ValueError as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+    
+    # --- No valid options provided ---
+    else:
+        console.print("Usage error: Provide a hash to view, or --parent and --child to create a link.")
+        raise typer.Exit(1)
+
+=== datatrac/cli/commands/push.py ===
+# datatrac/cli/commands/push.py
+from typing import Annotated
+import typer
+from rich.console import Console
+from datatrac.core.db import get_db
+from datatrac.core.manager import DataManager
+
+app = typer.Typer(help="Push a dataset to the registry.")
+console = Console()
+
+@app.callback(invoke_without_command=True)
+def push(
+    local_path: Annotated[str, typer.Argument(help="The local path to the dataset file.")],
+    source: Annotated[str, typer.Option("--source", "-s", help="The original source URL of the dataset.")] = None
+):
+    """
+    Hash a local dataset file and add it to the registry.
+    """
+    try:
+        db_session = next(get_db())
+        manager = DataManager(db_session)
+        # Capture both the dataset and the new boolean flag
+        dataset, was_uploaded = manager.push_dataset(local_path, source)
+
+        # Only print the "success" message if a new upload happened
+        if was_uploaded:
+            console.print(f"✅ Dataset '[bold cyan]{dataset.name}[/bold cyan]' pushed successfully!")
+        
+        # Always print the hash
+        console.print(f"   Hash: [yellow]{dataset.hash}[/yellow]")
+
+    except FileNotFoundError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+    except Exception as e:
+        console.print(f"[bold red]An unexpected error occurred:[/bold red] {e}")
+
+=== datatrac/cli/main.py ===
+# datatrac/cli/main.py
+import typer
+from rich.console import Console
+from datatrac.core.db import create_database_tables
+from .commands import fetch, push, lineage, delete
+
+# Initialize rich console for beautiful output
+console = Console()
+
+# Create the main Typer application
+app = typer.Typer(
+    name="datatrac",
+    help="A tool to discover, manage, and trace data files efficiently.",
+    add_completion=False,
+)
+
+# Add command groups (sub-commands)
+app.add_typer(fetch.app, name="fetch")
+app.add_typer(push.app, name="push")
+app.add_typer(lineage.app, name="lineage")
+app.add_typer(delete.app, name="delete")
+
+@app.callback()
+def main():
+    """
+    Manage your datasets with DataTrac.
+    """
+    # This is a good place to ensure the database and tables are created
+    create_database_tables()
+
+if __name__ == "__main__":
+    app()
+
+=== datatrac/core/config.py ===
+# datatrac/core/config.py
+import os
+from pathlib import Path
+
+# --- LOCAL CONFIGURATION ---
+# Base directory for local app data (e.g., downloaded files, temp items)
+APP_DIR = Path(os.getenv("DATATRAC_HOME", Path.home() / ".datatrac"))
+
+# --- CENTRAL DATABASE CONFIGURATION (PostgreSQL) ---
+DB_USER = "datatrac_user"
+# IMPORTANT: For security, use environment variables in a real project
+# e.g., os.getenv("DB_PASSWORD", "your_strong_password")
+DB_PASSWORD = "your_strong_password"
+DB_HOST = "taklu.chickenkiller.com"
+DB_NAME = "datatrac_db"
+
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+
+# --- REMOTE REGISTRY CONFIGURATION ---
+REMOTE_USER = "naruto"
+REMOTE_HOST = "taklu.chickenkiller.com"
+REMOTE_STORAGE_PATH = "/home/naruto/datasets"
+
+REMOTE_TARGET = f"{REMOTE_USER}@{REMOTE_HOST}"
+
+# Ensure the local app directory exists
+APP_DIR.mkdir(exist_ok=True)    
+
+=== datatrac/core/db.py ===
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+from .config import DATABASE_URL
+
+# For PostgreSQL, remove the connect_args argument.
+# It is only needed for SQLite to disable thread checks.
+engine = create_engine(DATABASE_URL)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    """Dependency to get a DB session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def create_database_tables():
+    """Creates all database tables."""
+    # Import all models here before calling create_all
+    # This ensures they are registered with Base.metadata
+    from . import models
+    Base.metadata.create_all(bind=engine)
+
+=== datatrac/core/manager.py ===
+import subprocess
+import getpass
+from pathlib import Path
+from sqlalchemy.orm import Session
+from sqlalchemy import or_, select
+from datetime import datetime, timezone
+
+from . import models, utils
+from .config import REMOTE_TARGET, REMOTE_STORAGE_PATH
+
+def get_current_user():
+    return getpass.getuser()
+
+def run_command(command: list[str]):
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        error_message = result.stderr or result.stdout
+        raise RuntimeError(f"Command failed: {' '.join(command)}\nError: {error_message.strip()}")
+    return result.stdout
+
+class DataManager:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def find_by_hash(self, file_hash: str):
+        return self.db.query(models.Dataset).filter_by(hash=file_hash).first()
+
+    def find_all(self):
+        """
+        Finds all datasets that are either active in the registry OR 
+        that the current user has a local copy of.
+        """
+        user = get_current_user()
+        
+        # Subquery to get all dataset hashes the current user has locally
+        local_hashes_subquery = select(models.LocalCopy.dataset_hash).where(
+            models.LocalCopy.user_identifier == user
+        )
+
+        # Main query
+        query = self.db.query(models.Dataset).filter(
+            or_(
+                models.Dataset.is_active == True,
+                models.Dataset.hash.in_(local_hashes_subquery)
+            )
+        )
+        return query.order_by(models.Dataset.created_at.desc()).all()
+
+    def find_local_path_for_user(self, file_hash: str):
+        user = get_current_user()
+        copy = self.db.query(models.LocalCopy).filter_by(dataset_hash=file_hash, user_identifier=user).first()
+        return Path(copy.local_path) if copy and Path(copy.local_path).exists() else None
+
+    def _get_or_create_local_copy(self, dataset_hash: str, local_path: str):
+        user = get_current_user()
+        copy = self.db.query(models.LocalCopy).filter_by(dataset_hash=dataset_hash, user_identifier=user).first()
+        if copy:
+            copy.local_path = local_path
+        else:
+            copy = models.LocalCopy(dataset_hash=dataset_hash, user_identifier=user, local_path=local_path)
+            self.db.add(copy)
+        self.db.commit()
+
+
+    def push_dataset(self, local_path_str: str, source: str | None = None):
+        local_path = Path(local_path_str).resolve()
+        if not local_path.exists():
+            raise FileNotFoundError(f"File not found: {local_path}")
+
+        file_hash = utils.hash_file(str(local_path))
+        dataset = self.find_by_hash(file_hash)
+        was_uploaded = False  # Initialize flag
+
+        if not dataset:
+            print("Dataset not found in global registry. Uploading...")
+            registry_path = f"{REMOTE_STORAGE_PATH}/{file_hash}{local_path.suffix}"
+            run_command(["scp", str(local_path), f"{REMOTE_TARGET}:{registry_path}"])
+
+            # NEW: Get file size during push
+            file_size = local_path.stat().st_size
+
+            dataset = models.Dataset(
+                hash=file_hash, 
+                name=local_path.name, 
+                source=source, 
+                registry_path=registry_path,
+                size_bytes=file_size
+            )
+            self.db.add(dataset)
+            was_uploaded = True # Set flag to True on new upload
+        else:
+            print(f"Dataset with hash {file_hash[:8]}... already exists in global registry.")
+
+        self._get_or_create_local_copy(file_hash, str(local_path))
+        
+        # Return both the dataset object and the flag
+        return dataset, was_uploaded
+
+    def download_dataset(self, file_hash: str, destination_dir: str = "."):
+        existing_path = self.find_local_path_for_user(file_hash)
+        if existing_path:
+            return existing_path, "Dataset already exists locally at the path below."
+        
+        dataset = self.find_by_hash(file_hash)
+        if not dataset:
+            raise FileNotFoundError(f"Dataset with hash {file_hash} not found in the registry.")
+        
+        # NEW: Prevent downloading a deregistered file
+        if not dataset.is_active:
+            raise FileNotFoundError("Cannot download: This dataset has been deregistered by an admin and is no longer available on the server.")
+        
+        local_destination = Path(destination_dir).resolve() / dataset.name
+        remote_source = f"{REMOTE_TARGET}:{dataset.registry_path}"
+        print(f"Downloading from {REMOTE_TARGET}...")
+        run_command(["scp", remote_source, str(local_destination)])
+        self._get_or_create_local_copy(file_hash, str(local_destination))
+
+
+        dataset.download_count += 1
+        dataset.last_downloaded_at = datetime.now(timezone.utc)
+        self.db.commit()
+        return local_destination, "Download complete."
+
+    def delete_dataset(self, file_hash: str):
+        """
+        Admin Function: Deregisters a dataset. It marks it as inactive
+        and deletes the file from the remote server.
+        """
+        dataset = self.find_by_hash(file_hash)
+        if not dataset:
+            return False, f"Dataset with hash {file_hash} not found."
+            
+        if not dataset.is_active:
+            return False, "This dataset has already been deregistered."
+
+        print(f"Deleting remote file: {dataset.registry_path}")
+        run_command(["ssh", REMOTE_TARGET, f"rm {dataset.registry_path}"])
+        
+        # UPDATE instead of DELETE
+        dataset.is_active = False
+        self.db.commit()
+        return True, "Dataset has been deregistered. Users with local copies can still see it."
+
+    def delete_local_copy(self, file_hash: str):
+        """User Function: Deletes a dataset from the local machine only."""
+        user = get_current_user()
+        copy = self.db.query(models.LocalCopy).filter_by(dataset_hash=file_hash, user_identifier=user).first()
+        if not copy:
+            return False, "You do not have a local record for this dataset."
+        
+        local_file = Path(copy.local_path)
+        if not local_file.exists():
+            self.db.delete(copy) # Clean up dangling record
+            self.db.commit()
+            return False, "Local file not found, but stale record was cleaned up."
+        
+        local_file.unlink()
+        self.db.delete(copy)
+        self.db.commit()
+        return True, f"Successfully deleted local file and record for: {local_file}"
+
+    def create_lineage(self, parent_hash: str, child_hash: str) -> models.Lineage:
+        """Creates a lineage link between two datasets."""
+        parent = self.find_by_hash(parent_hash)
+        if not parent:
+            raise ValueError(f"Parent dataset with hash {parent_hash} not found.")
+        
+        child = self.find_by_hash(child_hash)
+        if not child:
+            raise ValueError(f"Child dataset with hash {child_hash} not found.")
+
+        lineage_link = models.Lineage(parent_hash=parent_hash, child_hash=child_hash)
+        self.db.add(lineage_link)
+        self.db.commit()
+        self.db.refresh(lineage_link)
+        return lineage_link
+    
+    def get_lineage(self, file_hash: str) -> dict:
+        """Retrieves all parents and children for a given dataset hash."""
+        dataset = self.find_by_hash(file_hash)
+        if not dataset:
+            raise FileNotFoundError(f"Dataset with hash {file_hash} not found.")
+
+        parents = [
+            {"name": link.parent.name, "hash": link.parent.hash}
+            for link in dataset.parents
+        ]
+        children = [
+            {"name": link.child.name, "hash": link.child.hash}
+            for link in dataset.children
+        ]
+        
+        return {"parents": parents, "children": children}
+
+=== datatrac/core/models.py ===
+from datetime import datetime, timezone
+from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, BigInteger
+from sqlalchemy.orm import relationship
+from .db import Base
+
+class Dataset(Base):
+    __tablename__ = "datasets"
+
+    hash = Column(String, primary_key=True, index=True)
+    name = Column(String, index=True)
+    source = Column(String, nullable=True)
+    registry_path = Column(String, unique=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    
+
+    # NEW: The flag for soft deletes. Defaults to True for all new datasets.
+    is_active = Column(Boolean, default=True, nullable=False)
+    size_bytes = Column(BigInteger, nullable=True)
+    download_count = Column(BigInteger, default=0, nullable=False)
+    last_downloaded_at = Column(DateTime, nullable=True)
+
+    # This relationship links a dataset to all its local copies.
+    # When a Dataset is deleted, all its LocalCopy records are also deleted.
+    copies = relationship("LocalCopy", back_populates="dataset", cascade="all, delete-orphan")
+    
+    # Relationships for lineage
+    parents = relationship(
+        "Lineage",
+        foreign_keys="[Lineage.child_hash]",
+        back_populates="child",
+        cascade="all, delete-orphan"
+    )
+    children = relationship(
+        "Lineage",
+        foreign_keys="[Lineage.parent_hash]",
+        back_populates="parent",
+        cascade="all, delete-orphan"
+    )
+
+class LocalCopy(Base):
+    __tablename__ = "local_copies"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    dataset_hash = Column(String, ForeignKey("datasets.hash"), nullable=False)
+    user_identifier = Column(String, nullable=False, index=True) # e.g., 'anant'
+    local_path = Column(String, nullable=False)
+    
+    dataset = relationship("Dataset", back_populates="copies")
+
+class Lineage(Base):
+    __tablename__ = "lineage"
+
+    parent_hash = Column(String, ForeignKey("datasets.hash"), primary_key=True)
+    child_hash = Column(String, ForeignKey("datasets.hash"), primary_key=True)
+    
+    parent = relationship("Dataset", foreign_keys=[parent_hash], back_populates="children")
+    child = relationship("Dataset", foreign_keys=[child_hash], back_populates="parents")
+
+=== datatrac/core/utils.py ===
+# datatrac/core/utils.py
+import hashlib
+
+def hash_file(file_path: str) -> str:
+    """Calculates the SHA256 hash of a file."""
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        # Read and update hash in chunks to handle large files
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
+
+=== main.py ===
+import typer
+from rich.console import Console
+from rich.text import Text
+
+console = Console()
+
+def app_main(name: str = typer.Argument(default="world")):
+    text = Text(f"Hello {name}!", style="bold green on black")
+    console.print(text)
+
+def main():
+    typer.run(app_main)
+
+if __name__ == "__main__":
+    main()
+
