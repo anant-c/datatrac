@@ -1,5 +1,8 @@
 # datatrac - Dataset Discovery, Registry, and Lineage Tool
 
+## Presentation Link:
+https://docs.google.com/presentation/d/1DMHxoBldgaMp8NiIAc_hAzJCv8LsYULI5M4n9KWSye0/edit?usp=sharing
+
 ## Installation
 
 **Install dependencies**:
